@@ -1,11 +1,8 @@
-import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openaq import OpenAQ
-from dotenv import load_dotenv
 
-load_dotenv()
 
 app = FastAPI()
 
@@ -84,7 +81,6 @@ def perform_calculations():
 
     return {"aqi_data": {"AQI": max_value, "Alert": alert}, 
             "count": len(coords_db),
-            
             }
 
 
