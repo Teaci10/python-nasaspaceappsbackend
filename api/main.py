@@ -3,12 +3,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openaq import OpenAQ
+from dotenv import load_dotenv
 
-
+load_dotenv()
 
 app = FastAPI()
 
-client = OpenAQ(api_key="421d3183b203d60430bad493a8ec7755db93e72a8e7a518e0ab29e069b836dcc")  # No API key needed
+client = OpenAQ(api_key="421d3183b203d60430bad493a8ec7755db93e72a8e7a518e0ab29e069b836dcc") 
 
 coords_db = []
 
