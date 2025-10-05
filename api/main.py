@@ -3,14 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openaq import OpenAQ
 
-
 app = FastAPI()
-
-client = OpenAQ(api_key="421d3183b203d60430bad493a8ec7755db93e72a8e7a518e0ab29e069b836dcc") 
-
+client = OpenAQ(api_key="421d3183b203d60430bad493a8ec7755db93e72a8e7a518e0ab29e069b836dcc")
 coords_db = []
-
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,46 +38,37 @@ def perform_calculations():
     latest_coords = coords_db[-1]
     lat = latest_coords["latitude"]
     lon = latest_coords["longitude"]
-    finalvalues = []
-    locations = client.locations.list(coordinates=(lat, lon), radius=10_000, limit=1)
-    valuenames = ["no2", "o3", "pm10", "pm25", "so2"]
-    latest_coords = coords_db[-1] 
-    lat = latest_coords["latitude"] 
-    long = latest_coords["longitude"] 
 
-    
+    locations = client.locations.list(coordinates=(lat, lon), radius=5_000, limit=1)
 
-    locations = client.locations.list( 
-        coordinates=(lat, long), radius=5_000, limit=1 
-        ) 
-    for loc in locations.results: 
-        sensorId = loc.id 
-        sensornumber = loc.sensors 
-        data = client.locations.latest(loc.id) 
-        
-    for loc in data.results: 
-        values = loc.value
-        finalvalues.append( values)
-        max_value = max(finalvalues)
+    all_values = []
 
-    
-        if max_value <= 50:
-            alert= "Healthy"
-        elif max_value <= 100:
-            alert= "Moderate"
-        elif max_value <= 150:
-            alert= "Unhealthy for Sensitive Groups"
-        elif max_value <= 200:
-            alert= "Unhealthy"
-        elif max_value <= 300:
-            alert= "Very Unhealthy"
-        else:
-            alert= "Hazardous"
+    for loc in locations.results:
+        latest_data = client.locations.latest(loc.id)
+        for item in latest_data.results:
+            # Collect all pollutant values
+            all_values.append(item.value)
 
-    return {"aqi_data": {"AQI": max_value, "Alert": alert}, 
-            "count": len(coords_db),
-            }
+    if not all_values:
+        return {"aqi_data": {"AQI": 0, "Alert": "No Data"}, "count": len(coords_db)}
 
+    max_value = max(all_values)
 
+    # Determine alert
+    if max_value <= 50:
+        alert = "Healthy"
+    elif max_value <= 100:
+        alert = "Moderate"
+    elif max_value <= 150:
+        alert = "Unhealthy for Sensitive Groups"
+    elif max_value <= 200:
+        alert = "Unhealthy"
+    elif max_value <= 300:
+        alert = "Very Unhealthy"
+    else:
+        alert = "Hazardous"
 
-
+    return {
+        "aqi_data": {"AQI": max_value, "Alert": alert},
+        "count": len(coords_db),
+    }
