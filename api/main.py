@@ -1,80 +1,92 @@
-from fastapi import FastAPI, Header, HTTPException
+import uvicorn
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import os
-from Calculationsmain import calculate_aqi
-from Getting_Info import OpenAQData
+from openaq import OpenAQ
+
+
 
 app = FastAPI()
 
-API_KEY = os.getenv("API_KEY", "deneyprojeciddidegilcokonemli")
-OPENAQ_API_KEY = os.getenv("OPENAQ_API_KEY", "c2d1b7909e398c7968c7e35e628080507a755ca8850cce364b2ce6e78449f23b")
+client = OpenAQ(api_key="421d3183b203d60430bad493a8ec7755db93e72a8e7a518e0ab29e069b836dcc")  # No API key needed
 
-class Coords(BaseModel):
-    latitude: float
-    longitude: float
+coords_db = []
 
-origins = [
-    "http://localhost:3000",
-    "https://nasaspaceapps-lime.vercel.app",
-]
+
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-coords_db = []
+class Coords(BaseModel):
+    latitude: float
+    longitude: float
 
 @app.get("/")
 def root():
-    return {"status": "ok"}
+    return {"status": "ok", "message": "Air Quality API is running"}
 
 @app.post("/coords")
-async def add_coords(coords: Coords, x_api_key: str = Header(None)):
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API key")
-
+def add_coords(coords: Coords):
+    if coords_db:
+        coords_db.pop()
     coords_db.append({"latitude": coords.latitude, "longitude": coords.longitude})
-    return {"message": "Coordinates added successfully", "coords": coords_db}
-
-@app.get("/coords")
-def get_coords(x_api_key: str = Header(None)):
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API key")
-    return {"coords": coords_db, "count": len(coords_db)}
+    return {"message": "Coordinates updated successfully", "coords": coords_db[-1]}
 
 @app.post("/calculations")
-def perform_calculations(x_api_key: str = Header(None)):
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API key")
+def perform_calculations():
+    if not coords_db:
+        return {"aqi_data": {"AQI": 0, "Alert": "No Location"}, "count": 0}
 
-    if len(coords_db) == 0:
-        return {"aqi_data": None, "indices": None, "count": 0}
-
-    # Get latest coordinates
     latest_coords = coords_db[-1]
     lat = latest_coords["latitude"]
     lon = latest_coords["longitude"]
+    finalvalues = []
+    locations = client.locations.list(coordinates=(lat, lon), radius=10_000, limit=1)
+    valuenames = ["no2", "o3", "pm10", "pm25", "so2"]
+    latest_coords = coords_db[-1] 
+    lat = latest_coords["latitude"] 
+    long = latest_coords["longitude"] 
 
-    # Fetch pollutant data from OpenAQ
-    openaq = OpenAQData(api_key=OPENAQ_API_KEY)
-    pollutant_data = openaq.get_pollutants_by_location(lat, lon)
+    
 
-    # Calculate AQI using functional approach
-    aqi_result = calculate_aqi(pollutant_data)
+    locations = client.locations.list( 
+        coordinates=(lat, long), radius=5_000, limit=1 
+        ) 
+    for loc in locations.results: 
+        sensorId = loc.id 
+        sensornumber = loc.sensors 
+        data = client.locations.latest(loc.id) 
+        
+    for loc in data.results: 
+        values = loc.value
+        finalvalues.append( values)
+        max_value = max(finalvalues)
 
-    # Return detailed response
-    return {
-        "aqi_data": aqi_result["overall_aqi"],
-        "indices": aqi_result["indices"],
-        "pollutant_data": pollutant_data,
-        "count": len(coords_db)
-    }
+    
+        if max_value <= 50:
+            alert= "Healthy"
+        elif max_value <= 100:
+            alert= "Moderate"
+        elif max_value <= 150:
+            alert= "Unhealthy for Sensitive Groups"
+        elif max_value <= 200:
+            alert= "Unhealthy"
+        elif max_value <= 300:
+            alert= "Very Unhealthy"
+        else:
+            alert= "Hazardous"
+
+    return {"aqi_data": {"AQI": max_value, "Alert": alert}, 
+            "count": len(coords_db),
+            
+            }
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+

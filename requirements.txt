@@ -1,5 +1,4 @@
-fastapi
-mangum 
+fastapi 
 pydantic
 pandas
-requests
+math
