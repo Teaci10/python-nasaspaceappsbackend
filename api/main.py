@@ -2,7 +2,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
-from Calculations import AQI_calculation, set_pollutant_data
+from Calculationsmain import calculate_aqi
 from Getting_Info import OpenAQData
 
 app = FastAPI()
@@ -28,8 +28,6 @@ app.add_middleware(
 )
 
 coords_db = []
-lat = None
-lon = None
 
 @app.get("/")
 def root():
@@ -39,9 +37,6 @@ def root():
 async def add_coords(coords: Coords, x_api_key: str = Header(None)):
     if x_api_key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API key")
-    
-    lat = coords.latitude
-    lon = coords.longitude
 
     coords_db.append({"latitude": coords.latitude, "longitude": coords.longitude})
     return {"message": "Coordinates added successfully", "coords": coords_db}
@@ -50,41 +45,36 @@ async def add_coords(coords: Coords, x_api_key: str = Header(None)):
 def get_coords(x_api_key: str = Header(None)):
     if x_api_key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API key")
-    
     return {"coords": coords_db, "count": len(coords_db)}
 
 @app.post("/calculations")
 def perform_calculations(x_api_key: str = Header(None)):
-    global lat, lon
     if x_api_key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API key")
-    
 
-    count = len(coords_db)
+    if len(coords_db) == 0:
+        return {"aqi_data": None, "indices": None, "count": 0}
 
-    if count == 0:
-        return {
-            "aqi_data": None,
-            "count": 0
-        }
-
-    # Get the latest coordinates
+    # Get latest coordinates
     latest_coords = coords_db[-1]
     lat = latest_coords["latitude"]
     lon = latest_coords["longitude"]
-    
-    # Fetch pollutant data
+
+    # Fetch pollutant data from OpenAQ
     openaq = OpenAQData(api_key=OPENAQ_API_KEY)
     pollutant_data = openaq.get_pollutants_by_location(lat, lon)
-    
-    # Set pollutant data for calculations
-    set_pollutant_data(pollutant_data)
-    
-    # Calculate AQI
-    aqi_data = AQI_calculation()
 
+    # Calculate AQI using functional approach
+    aqi_result = calculate_aqi(pollutant_data)
+
+    # Return detailed response
     return {
-        "aqi_data": aqi_data,
+        "aqi_data": aqi_result["overall_aqi"],
+        "indices": aqi_result["indices"],
         "pollutant_data": pollutant_data,
-        "count": count
+        "count": len(coords_db)
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
